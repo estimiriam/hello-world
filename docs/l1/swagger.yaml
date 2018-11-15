@@ -1,0 +1,289 @@
+swagger: '2.0'
+info:
+  description: >-
+    The Boot Script Service API allows the caller to retrieve an iPXE boot script from the boot script server, and to set, update, delete, and retrieve boot script paramters for each host in a system. 
+    Boot scripts are generated on demand and delivered to the requestor during an iPXE boot.  
+  version: 1.0.0
+  title: Boot Script Service API
+host: 'bootscriptserver:27778'
+basePath: /boot/v1
+schemes:
+  - http
+produces:
+  - application/json
+consumes:
+  - application/json
+paths:
+  /bootscript:
+    get:
+      summary: GET iPXE boot script
+      description: >-
+        Retrieve iPXE boot script for the host specified by the MAC paramter. Alternatively, for
+        test/convenience purposes, use the name or the nid parameter to specify the host name or xname.
+        It is undefined to
+        specify more than one of parameters mac, name, or nid in the same request.  
+      operationId: bootscript_get
+      produces:
+        - text/plain
+      parameters:
+        - name: mac
+          in: query
+          type: string
+          description: MAC address of host requesting boot script
+        - name: name
+          in: query
+          type: string
+          description: Name of host requesting boot script
+        - name: nid
+          in: query
+          type: integer
+          description: Node ID (NID) of host requesting boot script
+        - name: retry
+          in: query
+          type: integer
+          description: Number of times requesting script without a successful boot
+        - name: arch
+          in: query
+          type: string
+          description: The architecture value from the iPXE variable ${buildarch}
+      responses:
+        '200':
+          description: Bootscript for requested MAC address
+          schema:
+            type: array
+            items:
+              type: string
+        '400':
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/Error'
+        '404':
+          description: >-
+            Does Not Exist - Either the host, MAC or nid are unknown and there
+            is no Default, or the existing entry does not specify a kernel image
+            for boot.
+          schema:
+            $ref: '#/definitions/Error'
+        default:
+          description: Unexpected error
+          schema:
+            $ref: '#/definitions/Error'
+  /bootparameters:
+    get:
+      summary: GET boot parameters
+      description: Retrieve the boot parameters for one or more hosts, as specified by hosts, macs, or nids in the request body, or retrieve boot parameters for a kernel or initrd image, as specified by kernel or initrd in the request body.  If retrieving boot parameters for hosts and the
+        value of the nids parameter in the request body is 0, return all nodes
+        which currently have parameter settings (not intended for
+        actual system boot, but for display/verification of current settings). 
+        Alternatively, if you specify a kernel or initird image, but no host, mac, or nid, the boot script service will retrieve info related just to the specified kernel or initrd image.
+        Note that the kernel and initrd images are specified with a URL or
+        path.  A plain path will result in a tftp download from this server.  If
+        a URL is provided, it can be from any available service which iPXE
+        supports, and any location that the iPXE client has access to. 
+      parameters:
+        - name: bootparams
+          in: body
+          schema:
+            $ref: '#/definitions/BootParams'
+      responses:
+        '200':
+          description: List of currently known boot parameters
+          schema:
+            type: array
+            items:
+              $ref: '#/definitions/BootParams'
+        '400':
+          description: Bad Request - BootParams value incorrect
+          schema:
+            $ref: '#/definitions/Error'
+        '404':
+          description: 'Does Not Exist - Cannot find host, MAC, or nid'
+          schema:
+            $ref: '#/definitions/Error'
+        default:
+          description: Unexpected error
+          schema:
+            $ref: '#/definitions/Error'
+    put:
+      summary: PUT (set/update) boot parameters
+      description: >-
+        Set or update boot parameters for one or more hosts.
+        Specify a list of either hosts, macs, or nids along with the boot parameters to associate with those hosts.  
+        The macs or nids lists are mapped to
+        hosts based on hardware state manager info.  
+        The params entry specifies
+        the boot parameters to associate with those specific hosts.  
+        Special entries for 'Default', 'Compute', and 'Service' can also be specified as hosts, and are managed similar to specific hosts.  
+        Along with the hosts, there must be a kernel image reference in order for the boot script service to be able to generate a boot script.  
+        In most cases, there should also be an initrd image reference, unless the kernel being booted is stand-alone and does not require an initrd image.
+        Finally, the params entry can be used to specify boot parameters specific to the specified hosts.
+        If there are no boot params stored for one or more hosts, then a new entry for that host
+        will be created. 
+        For kernel, initrd and params values, an existing value will be replaced. The params value is a replacement of the existing values. 
+        If the params value does not specify one or values any existing values are removed.  
+      parameters:
+        - name: bootparams
+          in: body
+          schema:
+            $ref: '#/definitions/BootParams'
+      responses:
+        '200':
+          description: successfully update boot parameters
+        '400':
+          description: Bad Request - Invalid BootParams value
+          schema:
+            $ref: '#/definitions/Error'
+        '404':
+          description: 'Does Not Exist - Cannot find specified host, mac, or nid'
+          schema:
+            $ref: '#/definitions/Error'
+        default:
+          description: Unexpected error
+          schema:
+            $ref: '#/definitions/Error'
+    patch:
+      summary: PATCH existing boot parameters
+      description: >-
+        Update an existing entry with new boot parameters while retaining
+        existing settings for the kernel and initrd settings.  The entry only
+        needs to specify one or more hosts and the new boot parameters without
+        the need to specify the kernel and initrd entries.
+      parameters:
+        - name: bootparams
+          in: body
+          schema:
+            $ref: '#/definitions/BootParams'
+      responses:
+        '200':
+          description: Successfully update boot parameters
+        '400':
+          description: Bad Request - Invalid BootParams value.
+          schema:
+            $ref: '#/definitions/Error'
+        '404':
+          description: 'Does Not Exist - Cannot find entry for specified host, nac, or nid'
+          schema:
+            $ref: '#/definitions/Error'
+    delete:
+      summary: DELETE existing boot parameters
+      description: >-
+        Remove an existing boot parameter settings for one or more hosts, as specified by hosts, macs, or nids.
+        If you specify a kernel or initrd image, the image entry is removed, and the references by any existing hosts are removed.  
+        Note that this can leave a host unbootable, and so will need to be updated with new image references before they will be bootable.
+      parameters:
+        - name: bootparams
+          in: body
+          schema:
+            $ref: '#/definitions/BootParams'
+      responses:
+        '200':
+          description: Successfully deleted the appropriate entry or entries
+        '400':
+          description: Bad Request - Invalid BootParams value.
+          schema:
+            $ref: '#/definitions/Error'
+        '404':
+          description: 'Does Not Exist - Cannot find specified host, mac, or nid'
+          schema:
+            $ref: '#/definitions/Error'
+  /dumpstate:
+    get:
+      summary: GET dumpstate 
+      description: >-
+        Dump internal state of boot script service for debugging purposes. Return known
+        hosts and associated information, along with the known boot parameter
+        info.  
+      responses:
+        '200':
+          description: Return internal service state
+          schema:
+            $ref: '#/definitions/StateInfo'
+        '400':
+          description: Bad Request
+definitions:
+  BootParams:
+    description: >-
+      When used as a request body, the caller sets boot parameters and specifies hosts, along with the kernel image path/URL and initrd path/URL. To specify hosts, use one of the three parameters, hosts, macs, or nids.
+      If MAC addresses, or nids are used, they are mapped to host names based on information retrieved from the hardware state manager.  Likewise, if nids are used, they are mapped to host names with the same hardware state manager info.  While the expected usage is to specify hosts based on their host names, the "macs" and "nids" alternatives may be more conventient in some contexts.
+      To select a certain category of available hosts, special names "Compute", "Service", "Default" may be used as hosts values.
+      Alternatively, if you specify a kernel or initird image and params, but no host, mac, or nid, the boot script service will associate the specified params with the specified kernel or initrd image.
+      When used as a response body, identifies the hosts available for booting using either hosts, macs, or nids, depending on which parameter was used in the request.  
+    type: object
+    properties:
+      hosts:
+        type: array
+        description: host names 
+        items:
+          type: string
+      macs:
+        type: array
+        description: MAC addresses
+        items:
+          type: string
+      nids:
+        type: array
+        description: Node ID 
+        items:
+          type: integer
+      params:
+        type: string
+        description: Specific to the kernel that is being booted.
+      kernel:
+        type: string
+        description: URL or file system path specifying kernel image.
+      initrd:
+        type: string
+        description: URL or file system path specifying initrd image.
+  Component:
+    description: This data structure is used to return host info for debug purposes
+    type: object
+    properties:
+      id:
+        type: string
+      state:
+        type: string
+      class:
+        type: string
+      fqdn:
+        type: string
+      nid:
+        type: integer
+      mac:
+        type: array
+        items:
+          type: string
+      nicaddr:
+        type: array
+        items:
+          type: integer
+  StateInfo:
+    description: >-
+      This data structure is used to return the full componennt and boot
+      parameter info of the dumpstate request.
+    type: object
+    properties:
+      components:
+        type: array
+        items:
+          type: object
+          properties:
+            schema:
+              $ref: '#/definitions/Component'
+      params:
+        type: array
+        items:
+          type: object
+          properties:
+            schema:
+              $ref: '#/definitions/BootParams'
+  Error:
+    description: Return error code and message indicating what error condition occurred.
+    type: object
+    required:
+      - code
+      - message
+    properties:
+      code:
+        type: string
+      message:
+        type: string
